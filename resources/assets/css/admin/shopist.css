@@ -1,3 +1,6 @@
+body {
+  font-size: 14px !important;
+}
 .error
 {
   color:#FF0000;

@@ -1,6 +1,5 @@
 @include('includes.frontend.header-content-custom-css')
 
-
 <div id="header_content" class="header-before-slider header-background">
   <div class="top-header">
     <div class="container">
@@ -48,8 +47,6 @@
           </div>     
         </div>
       
-
-      <h1>Here</h1>
         <div class="col-xs-7 col-sm-6 col-md-6 col-lg-6">
           <div class="clearfix">
             <div class="pull-right">

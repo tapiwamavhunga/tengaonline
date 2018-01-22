@@ -20,17 +20,9 @@ class Collection extends IlluminateCollection
      */
     protected $requiredFields = [
         'id',
-        'product_id',
         'name',
         'price',
-        'order_price',
-        'quantity',
-        'img_src',  
-        'variation_id',
-        'options',
-        'tax',
-        'product_type',
-        'acces_token'
+        'quantity'
     ];
 
     public function setItems(array $items)
@@ -61,20 +53,13 @@ class Collection extends IlluminateCollection
 
         return false;
     }
-    
+
     public function insert(array $item)
     {
         $this->validateItem($item);
 
-        if(get_product_type($item['id']) === 'customizable_product')
-        {
-          $this->items[$item['acces_token']] = (object) $item;
-        }
-        else
-        {
-          $this->items[$item['id']] = (object) $item;
-        }
-        
+        $this->items[$item['id']] = (object) $item;
+
         return $this->items;
     }
 
@@ -102,9 +87,9 @@ class Collection extends IlluminateCollection
             throw new Exception('Quantity can not be less than 1');
         }
 
-//        if (! is_numeric($item['price'])) {
-//            throw new Exception('Price must be a numeric number');
-//        }
+        if (! is_numeric($item['price'])) {
+            throw new Exception('Price must be a numeric number');
+        }
     }
 
 }

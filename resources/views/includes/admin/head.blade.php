@@ -49,3 +49,9 @@
 {!! HTML::script('resources/assets/editor/summernote.min.js') !!}
 {!! HTML::script('resources/assets/input-tag/tagmanager.min.js') !!}
 {!! HTML::script('resources/assets/input-tag/bootstrap3-typeahead.min.js') !!}
+
+<style type="text/css">
+	body {
+		font-size: 14px !important;
+	}
+</style>

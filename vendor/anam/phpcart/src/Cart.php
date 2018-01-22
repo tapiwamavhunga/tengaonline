@@ -4,8 +4,7 @@ namespace Anam\Phpcart;
 use Exception;
 use InvalidArgumentException;
 use Symfony\Component\HttpFoundation\Session\Session;
-use shopist\Models\Option;
-use shopist\Models\Post;
+use Symfony\Component\HttpFoundation\Session\Storage\SessionStorageInterface;
 
 class Cart implements CartInterface
 {
@@ -31,35 +30,20 @@ class Cart implements CartInterface
      * @var string
      */
     protected $name = "phpcart";
-    
-    /**
-     * Manage Settings
-     *
-     * @var array
-     */
-    public $settings;
-    public $shipping;
+
     /**
      * Construct the class.
      *
+     * @param  string  $name
+     * @param  \Symfony\Component\HttpFoundation\Session\Storage\SessionStorageInterface  $storage
      * @return void
      */
-    public function __construct($name = null)
+    public function __construct($name = null, SessionStorageInterface  $storage = null)
     {
-        $this->session = new Session();
+        $this->session = new Session($storage);
+
         $this->collection = new Collection();
-        $get_settings_option = Option :: where('option_name', '_settings_data')->first();
-        
-        if(!empty($get_settings_option->option_value)){
-          $this->settings = unserialize($get_settings_option->option_value);
-        }
-        
-        $get_shipping_data = Option :: where('option_name', '_shipping_method_data')->first();
-        
-        if(!empty($get_shipping_data->option_value)){
-          $this->shipping = unserialize($get_shipping_data->option_value);
-        }
-        
+
         if ($name) {
             $this->setCart($name);
         }
@@ -100,24 +84,12 @@ class Cart implements CartInterface
      */
     public function add(Array $product)
     {
-        $product_id = 0;
         $this->collection->validateItem($product);
-        
-        if(isset($product['variation_id']) && $product['variation_id'] > 0){
-          $post = Post::where(['id' => $product['variation_id']])->get()->first();
-          
-          if(!empty($post)){
-            $product_id = $post->parent_id;
-          }
-        }
-        else{
-          $product_id = $product['id'];
-        }
-        
+
         // If item already added, increment the quantity
-        if ( $this->has($product['id']) && ( get_product_type($product_id) == 'simple_product' || get_product_type($product_id) == 'configurable_product' ) ) {
+        if ($this->has($product['id'])) {
             $item = $this->get($product['id']);
-            
+
             return $this->updateQty($item->id, $item->quantity + $product['quantity']);
         }
 
@@ -144,19 +116,11 @@ class Cart implements CartInterface
             throw new Exception('id is required');
         }
 
-//        if (! $this->has($product['id'])) {
-//            throw new Exception('There is no item in shopping cart with id: ' . $product['id']);
-//        }
-        
-        if(get_product_type($product['id']) === 'customizable_product')
-        {
-          $item = array_merge((array) $this->get($product['acces_token']), $product);
+        if (! $this->has($product['id'])) {
+            throw new Exception('There is no item in shopping cart with id: ' . $product['id']);
         }
-        else
-        {
-          $item = array_merge((array) $this->get($product['id']), $product);
-        }
-        
+
+        $item = array_merge((array) $this->get($product['id']), $product);
 
         $items = $this->collection->insert($item);
 
@@ -343,17 +307,6 @@ class Cart implements CartInterface
     {
         $this->clear();
     }
-    
-    /**
-     * Cart row price calculation  
-     *
-     * @return float
-     */
-
-    public function getRowPrice($qty, $price)
-    {
-        return $qty * $price;
-    }
 
     /**
      * Empty cart
@@ -364,266 +317,5 @@ class Cart implements CartInterface
     public function clear()
     {
         $this->session->remove($this->getCart());
-        $this->shippingRemove();
-    }
-    
-    /**
-     * Cart Tax Calculation
-     *
-     * @return float
-     */
-
-    public function getTax()
-    {
-      $taxRate = 0;
-      if($this->settings['general_settings']['taxes_options']['enable_status'] && $this->settings['general_settings']['taxes_options']['tax_amount'])
-      {
-        if($this->settings['general_settings']['taxes_options']['apply_tax_for'] == 'order_total')
-        {
-          $taxRate = $this->getTotal() * ($this->settings['general_settings']['taxes_options']['tax_amount'] / 100.0);
-        }
-        elseif($this->settings['general_settings']['taxes_options']['apply_tax_for'] == 'per_product')
-        {
-          $getItem = $this->getItems();
-          
-          foreach($getItem as $val)
-          {
-            if($val->tax)
-            {
-              $taxRate += ($val->price * ($this->settings['general_settings']['taxes_options']['tax_amount'] / 100.0)) * $val->quantity;
-            }
-          }
-        }
-      }
-      
-      return $taxRate;
-    }
-    
-    public function getSubTotalAndTax()
-    {
-      return $this->getTotal() + $this->getTax();
-    }
-    
-    public function getLocalDeliveryShippingPercentageTotal()
-    {
-      return $this->getSubTotalAndTax()  * ($this->shipping['local_delivery']['delivery_fee'] / 100.0);
-    }
-    
-    public function getLocalDeliveryShippingPerProductTotal()
-    {
-      return $this->totalQuantity() * $this->shipping['local_delivery']['delivery_fee'];
-    }
-    
-    public function getCartTotal()
-    {
-      if($this->is_coupon_applyed()){
-        return ($this->getSubTotalAndTax() + $this->getShippingCost()) - $this->couponPrice();
-      }
-      else{
-        return ($this->getSubTotalAndTax() + $this->getShippingCost()) + $this->couponPrice();
-      }
-    }
-    
-    public function setShippingMethod($shipping_data = array())
-    {
-      if(!$this->session->has('eBazar_shipping_method'))
-      {
-        $this->session->set('eBazar_shipping_method', $shipping_data);
-      }
-      elseif($this->session->has('eBazar_shipping_method'))
-      {
-        $this->session->remove('eBazar_shipping_method');
-        $this->session->set('eBazar_shipping_method', $shipping_data);
-      }
-      
-      if($this->session->has('eBazar_shipping_method'))
-      {
-        return true;
-      }
-    }
-    
-    public function getShippingMethod()
-    {
-      if(!$this->shipping['shipping_option']['enable_shipping'] || ($this->shipping['shipping_option']['enable_shipping'] && !$this->shipping['flat_rate']['enable_option'] && !$this->shipping['free_shipping']['enable_option'] && !$this->shipping['local_delivery']['enable_option']))
-      {
-        if($this->session->has('eBazar_shipping_method'))
-        {
-          $this->shippingRemove();
-          return false;
-        }
-      }
-      elseif(($this->shipping['shipping_option']['enable_shipping']) && ($this->shipping['flat_rate']['enable_option'] || $this->shipping['free_shipping']['enable_option'] || $this->shipping['local_delivery']['enable_option']))
-      {
-        if(!$this->session->has('eBazar_shipping_method'))
-        {
-          if($this->shipping['flat_rate']['enable_option'] && $this->shipping['flat_rate']['method_cost'])
-          {
-            
-            $this->setShippingMethod( array('shipping_method' => 'flat_rate', 'shipping_cost' => $this->shipping['flat_rate']['method_cost']) );
-            
-            if($this->session->has('eBazar_shipping_method'))
-            {
-              return $this->session->get('eBazar_shipping_method');
-            }
-          }
-          elseif($this->shipping['free_shipping']['enable_option'] && ( Cart::getSubTotalAndTax() >= $this->shipping['free_shipping']['order_amount'] ))
-          {
-            $this->setShippingMethod( array('shipping_method' => 'free_shipping', 'shipping_cost' => 0) );
-            
-            if($this->session->has('eBazar_shipping_method'))
-            {
-              return $this->session->get('eBazar_shipping_method');
-            }
-          }
-          elseif($this->shipping['local_delivery']['enable_option'] && $this->shipping['local_delivery']['fee_type'] === 'fixed_amount' && $this->shipping['local_delivery']['delivery_fee'])
-          {
-            $this->setShippingMethod( array('shipping_method' => 'local_delivery', 'shipping_cost' => $this->shipping['local_delivery']['delivery_fee']) );
-            
-            if($this->session->has('eBazar_shipping_method'))
-            {
-              return $this->session->get('eBazar_shipping_method');
-            }
-          }
-          elseif($this->shipping['local_delivery']['enable_option'] && $this->shipping['local_delivery']['fee_type'] === 'cart_total' && $this->shipping['local_delivery']['delivery_fee'])
-          {
-            $this->setShippingMethod( array('shipping_method' => 'local_delivery', 'shipping_cost' => $this->getLocalDeliveryShippingPercentageTotal()) );
-            
-            if($this->session->has('eBazar_shipping_method'))
-            {
-              return $this->session->get('eBazar_shipping_method');
-            }
-          }
-          elseif($this->shipping['local_delivery']['enable_option'] && $this->shipping['local_delivery']['fee_type'] === 'per_product' && $this->shipping['local_delivery']['delivery_fee'])
-          {
-            $this->setShippingMethod( array('shipping_method' => 'local_delivery', 'shipping_cost' => $this->getLocalDeliveryShippingPerProductTotal()) );
-            
-            if($this->session->has('eBazar_shipping_method'))
-            {
-              return $this->session->get('eBazar_shipping_method');
-            }
-          }
-        }
-        elseif ($this->session->has('eBazar_shipping_method')) 
-        {
-          $data = $this->session->get('eBazar_shipping_method');
-          if($this->shipping['local_delivery']['enable_option'] && $this->shipping['local_delivery']['fee_type'] === 'per_product' && $this->shipping['local_delivery']['delivery_fee'] && isset($data['shipping_method']) && $data['shipping_method'] == 'local_delivery')
-          {
-            $this->setShippingMethod( array('shipping_method' => 'local_delivery', 'shipping_cost' => $this->getLocalDeliveryShippingPerProductTotal()) );
-            
-            if($this->session->has('eBazar_shipping_method'))
-            {
-              return $this->session->get('eBazar_shipping_method');
-            }
-          }
-          else{
-            return $this->session->get('eBazar_shipping_method');
-          }
-        }
-      }
-    }
-    
-    public function getShippingCost()
-    {
-      $shipping_cost = 0;
-     
-      if($this->getShippingMethod())
-      {
-        $getShippingData = $this->getShippingMethod();
-        $shipping_cost = $getShippingData['shipping_cost'];
-      }
-      
-      return $shipping_cost;
-    }
-    
-    public function shippingRemove()
-    {
-      if($this->session->has('eBazar_shipping_method'))
-      {
-        $this->session->remove('eBazar_shipping_method');
-      }
-    }
-    
-    public function calculationCoupon($amount, $type, $coupon_code)
-    {
-      $is_coupon_set = false;
-      $get_val = 0;
-      
-      if($type == 'discount_from_product'){
-        $get_val = $this->totalQuantity() * $amount;
-      }
-      elseif($type == 'percentage_discount_from_product'){
-        if(!empty($this->items())){
-          foreach($this->items() as $item){
-             $get_val +=  $item->quantity * ($item->price * ($amount/100));
-          }
-        }
-      }
-      elseif($type == 'discount_from_total_cart'){
-        $get_val = $amount;
-      }
-      elseif($type == 'percentage_discount_from_total_cart'){
-        $get_val = $this->getTotal() * ($amount/100);
-      }
-      
-      if($get_val && $get_val > 0 && $this->getTotal() > $get_val){
-        if($this->session->has('applyed_coupon_price')){
-          $this->session->remove('applyed_coupon_price');
-          $this->session->set('applyed_coupon_price', $get_val);
-        }
-        else{
-          $this->session->set('applyed_coupon_price', $get_val);
-        }
-        
-        if($this->session->has('applyed_coupon_code')){
-          $this->session->remove('applyed_coupon_code');
-          $this->session->set('applyed_coupon_code', $coupon_code);
-        }
-        else{
-          $this->session->set('applyed_coupon_code', $coupon_code);
-        }
-      }
-      else{
-        $this->remove_coupon();
-      }
-      
-      if($this->session->has('applyed_coupon_price') && $this->session->has('applyed_coupon_code')){
-        $is_coupon_set = true;
-      }
-      
-      return $is_coupon_set;
-    }
-    
-    public function  couponPrice(){
-      $price = 0;
-      
-      if($this->session->has('applyed_coupon_price')){
-        $price = $this->session->get('applyed_coupon_price');
-      }
-      
-      return $price;
-    }
-    
-    public function  couponCode(){
-      $code = '';
-      
-      if($this->session->has('applyed_coupon_code')){
-        $code = $this->session->get('applyed_coupon_code');
-      }
-      
-      return $code;
-    }
-    
-    public function is_coupon_applyed(){
-      if($this->session->has('applyed_coupon_price') && $this->session->has('applyed_coupon_code')){
-        return true;
-      }
-    }
-    
-    public function remove_coupon(){
-      if($this->session->has('applyed_coupon_price') && $this->session->has('applyed_coupon_code')){
-        $this->session->remove('applyed_coupon_price');
-        $this->session->remove('applyed_coupon_code');
-        return true;
-      }
     }
 }

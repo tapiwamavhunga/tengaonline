@@ -180,7 +180,8 @@ return [
         'Collective\Html\HtmlServiceProvider',
         'Anhskohbo\NoCaptcha\NoCaptchaServiceProvider',
         'Anam\Phpcart\CartServiceProvider',
-        Intervention\Image\ImageServiceProvider::class
+        Intervention\Image\ImageServiceProvider::class,
+        Barryvdh\Debugbar\ServiceProvider::class
 
     ],
 
@@ -229,9 +230,9 @@ return [
         'URL' => Illuminate\Support\Facades\URL::class,
         'Validator' => Illuminate\Support\Facades\Validator::class,
         'View' => Illuminate\Support\Facades\View::class,
-        'Form'      => 'Collective\Html\FormFacade',
-        'HTML'      => 'Collective\Html\HtmlFacade',
-        'Cart'      => 'Anam\Phpcart\Facades\Cart',
+        'Form'      => Collective\Html\FormFacade::class,
+        'HTML'      => Collective\Html\HtmlFacade::class,
+        'Cart'      => Anam\Phpcart\Facades\Cart::class,
         'Image'     => Intervention\Image\Facades\Image::class
 
     ],
